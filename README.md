@@ -1,340 +1,199 @@
-# 🚖 Uber Supply-Demand Gap Analysis
+# Uber Supply-Demand Gap Analysis
 
-A comprehensive exploratory data analysis (EDA) project examining Uber's operational challenges with supply-demand imbalances, driver cancellations, and car unavailability across different time slots and pickup locations.
+An exploratory data analysis and SQL case study examining why Uber ride requests go unfulfilled, when cancellations and car shortages occur, and how ride availability differs between the City and the Airport.
 
-## 📋 Table of Contents
-- [Overview](#overview)
-- [Problem Statement](#problem-statement)
-- [Dataset](#dataset)
-- [Project Structure](#project-structure)
-- [Key Findings](#key-findings)
-- [Root Causes Analysis](#root-causes-analysis)
-- [Business Recommendations](#business-recommendations)
-- [Visualizations](#visualizations)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Technologies Used](#technologies-used)
+![Dashboard Preview](images/dashboard_preview.png)
 
-## 📊 Overview
+---
 
-This project analyzes Uber ride request data to identify and understand supply-demand imbalances, particularly focusing on:
-- **High cancellation rates** from drivers
-- **Car unavailability** during peak demand periods
-- **Time slot patterns** with significant gaps between supply and demand
-- **Location-specific issues** (City → Airport vs Airport → City)
+## About the Project
 
-The analysis reveals critical operational inefficiencies that directly impact revenue and customer satisfaction.
+This is a personal Data Analyst portfolio project where I analyze 6,745 Uber ride requests. My goal was to find out why so many requests go unfulfilled, identify the peak hours when problems happen, and see how the issues differ between City and Airport pickups.
 
-## 🎯 Problem Statement
+## Why I Built This
 
-Uber faces significant operational challenges:
+I built this project to practice answering real business questions with data. Ride-hailing platforms experience demand shifts throughout the day, and when riders cannot get a car, it affects both customer experience and driver earnings. I wanted to use Python for data cleaning and exploratory analysis, write SQL queries to answer specific business questions, and build an interactive Streamlit dashboard to share the findings clearly.
 
-1. **Driver Cancellations** - Drivers frequently cancel ride requests, reducing completed trips
-2. **No Cars Available** - Insufficient driver supply during peak demand periods
-3. **Revenue Loss** - Unmet demand and cancellations result in lost revenue opportunities
-4. **Inconsistent Service** - Supply doesn't scale proportionally with demand across time slots
+## Dataset
 
-The objective is to identify root causes and develop data-driven recommendations to address these supply-demand gaps.
+The dataset covers **6,745 ride request records** over 5 weekdays (Monday, July 11 to Friday, July 15, 2016).
 
-## 📁 Dataset
+| Column Name | Type | Description |
+| :--- | :--- | :--- |
+| `request_id` | Integer | Unique identifier for each ride request |
+| `pickup_point` | String | Location category (`City` or `Airport`) |
+| `driver_id` | Float / Nullable | Assigned driver ID (empty if no car was found) |
+| `status` | String | Trip outcome (`Trip Completed`, `Cancelled`, `No Cars Available`) |
+| `request_timestamp` | Datetime | Date and time the ride was requested |
+| `drop_timestamp` | Datetime | Date and time the trip ended (empty if not completed) |
 
-The dataset contains **6,745 Uber ride request records** with the following attributes:
+### Missing Values and Request Status
+Missing values in this dataset are not data entry errors. They tell us at what step a ride ended:
+- **`Trip Completed` (2,831 trips):** Both driver ID and drop timestamp are present.
+- **`Cancelled` (1,264 trips):** A driver accepted the request (driver ID is present), but the trip was cancelled before completion (drop timestamp is empty).
+- **`No Cars Available` (2,650 trips):** No driver was assigned (driver ID is empty), so no trip ever started (drop timestamp is empty).
 
-| Column | Type | Description |
-|--------|------|-------------|
-| Request ID | int64 | Unique identifier for each ride request |
-| Pickup Point | object | Location type (City or Airport) |
-| Request Timestamp | object | Date and time of ride request |
-| Drop Timestamp | object | Date and time of ride completion |
-| Driver ID | float64 | Unique driver identifier |
-| Status | object | Trip outcome (Completed, Cancelled by Driver, No Cars Available) |
+## Tools Used
 
-### Data Quality
-- **Total Records**: 6,745 entries
-- **Missing Values**: 
-  - Driver ID: 2,650 missing (38.3%)
-  - Drop Timestamp: 3,914 missing (58%)
-- **Data Coverage**: Request and Pickup point have complete data
-- **Duplicate Records**: 0
+- **Python (Pandas, Matplotlib, Seaborn):** Data cleaning, timestamp conversion, grouping, and visualization.
+- **SQL (SQLite):** Aggregations, conditional counts (`CASE WHEN`), CTEs, and a window function (`RANK() OVER`).
+- **Streamlit & Plotly:** Interactive dashboard with filters for pickup location, time period, and ride status.
 
-### Status Distribution
-- **Trip Completed**: ~42% of requests
-- **Cancelled by Driver**: Significant portion of failures
-- **No Cars Available**: High occurrence during peak hours
-- **Overall Success Rate**: ~42% (concerning metric)
+## Data Cleaning
 
-## 📂 Project Structure
+1. **Standardized Column Names:** Renamed columns to lowercase snake_case (`request_id`, `pickup_point`, `driver_id`, `status`, etc.).
+2. **Parsed Timestamps:** Handled mixed timestamp formats (such as `11/7/16 11:51` and `13-07-2016 08:33:16`) using `pd.to_datetime(..., dayfirst=True)`.
+3. **Feature Engineering:**
+   - Extracted `request_hour` (0–23), `request_date`, and `day_name`.
+   - Created 5 time categories: `Early Morning (12 AM - 5 AM)`, `Morning Rush (5 AM - 10 AM)`, `Midday (10 AM - 5 PM)`, `Evening Rush (5 PM - 10 PM)`, and `Late Night (10 PM - 12 AM)`.
+   - Created binary flags (`is_completed`, `is_cancelled`, `is_no_cars`, `is_unfulfilled`) to simplify filtering and SQL checks.
 
-```
-├── source.ipynb                    # Main Jupyter Notebook with full EDA
-├── uber_cleaned_data.csv           # Cleaned and processed dataset
-├── requirements.txt                # Project dependencies
-├── .gitignore                      # Git ignore configuration
-└── README.md                       # Project documentation
-```
+## Exploratory Data Analysis
 
-## 🔍 Key Findings
+During the analysis, I focused on five main questions:
+1. **Overall Request Performance:** How many requests succeeded versus failed?
+2. **Hourly Demand:** Which hours receive the most requests, and which hours experience the most failures?
+3. **Location Breakdown:** How do cancellation rates and car shortages compare between the City and the Airport?
+4. **Rush Hour Comparison:** How do morning issues differ from evening issues?
+5. **Operational Priority:** Does a high failure percentage always mean a large volume problem?
 
-### 1. Temporal Patterns
+## SQL Queries
 
-**Peak Demand Hours:**
-- **Morning Peak**: 5:00 AM - 9:00 AM (City to Airport)
-- **Evening Peak**: 5:00 PM - 10:00 PM (Airport to City)
-- **Late Night**: 10:00 PM - 11:00 PM (Highest request volume: 184 requests)
-- **Off-Peak**: 3:00 AM - 5:00 AM (Lowest demand)
+I loaded the cleaned data into a local SQLite database (`data/uber.db`) and wrote 8 queries in [`sql/uber_analysis.sql`](sql/uber_analysis.sql).
 
-**Completion Rates by Time Slot:**
-- Peak hours show significantly lower completion rates
-- Early morning (5-9 AM) has the worst supply-demand gap
-- Night slots (10 PM onwards) also show critical gaps
-
-### 2. Location-Specific Issues
-
-**City to Airport (Morning):**
-- High demand from 5-10 AM
-- High driver cancellation rates
-- Root cause: Lower return demand (fewer incoming flights)
-- Impact: Major revenue loss during morning commute
-
-**Airport to City (Evening/Night):**
-- Peak demand 5-10 PM and late night
-- "No Cars Available" status is dominant
-- Root cause: Insufficient driver availability
-- Impact: Lost evening commute revenue
-
-### 3. Supply-Demand Gap Analysis
-
-- **Total Demand**: 6,745 ride requests
-- **Total Supply**: ~2,831 completed trips
-- **Overall Gap**: 58% of requests unfulfilled
-- **Highest Gap**: Early morning (5-9 AM) and late night (10 PM-11 PM)
-- **Lowest Gap**: Midday hours (10 AM - 4 PM)
-
-### 4. Cancellation Analysis
-
-- **Driver Cancellations** concentrated in:
-  - Early morning hours (long wait times for return trips)
-  - City pickup points (distance/duration concerns)
-  - Days with low airport traffic
-
-- **Pattern**: Drivers cancel when unprofitable trips are likely (City → Airport, low return demand)
-
-### 5. Completion Rate Insights
-
-- **Best Performance**: Midday hours (40-45% completion)
-- **Worst Performance**: Early morning and late night (25-35% completion)
-- **Weekend Effect**: 45% of unfulfilled requests occur during weekends
-- **Average Trips/Driver**: 0.83 trips (indicating underutilization)
-
-## 🔎 Root Causes Analysis
-
-### 1. Early Morning Gap (5-9 AM) - City to Airport
-
-**Why it happens:**
-- High demand for airport travel in morning
-- Few return flights arriving early morning = low return demand
-- Drivers reluctant to make long city-airport trip without return fare
-- Limited driver availability that early
-
-**Evidence:**
-- 58% completion rate during peak morning hours
-- Significant driver cancellation pattern
-- Long wait times for return passengers
-
-### 2. Evening/Night Gap (5-10 PM & 10 PM-11 PM) - Airport to City
-
-**Why it happens:**
-- High passenger arrival volume from flights
-- Insufficient drivers positioned at airport
-- Drivers don't relocate to airport proactively
-- Surge pricing doesn't compensate for location inconvenience
-
-**Evidence:**
-- "No Cars Available" is primary issue (not cancellations)
-- Persistent gap even during high demand
-- Driver-to-request ratio critically low
-
-### 3. General Supply-Demand Mismatch
-
-- Driver supply doesn't scale with demand fluctuations
-- Drivers concentrate on profitable routes, abandoning airport routes
-- No predictive deployment mechanism
-- Shift timings don't align with natural demand cycles
-
-## 💡 Business Recommendations
-
-### 1. **Dynamic Driver Incentive Program**
-Implement surge pricing and bonuses during critical gaps:
-- **Early Morning (5-9 AM)**: 1.5-2x fare multiplier for City→Airport trips + guaranteed return bonus
-- **Late Night (10 PM-11 PM)**: 1.5x multiplier for Airport→City trips
-- **Estimated Impact**: Reduce morning gap by 25-30%, evening gap by 20-25%
-
-### 2. **Airport-Dedicated Driver Shifts**
-Create dedicated driver pools stationed at airport:
-- Recruit drivers living near airport to avoid long travel time
-- Offer premium per-trip bonus for airport focus
-- Create 24/7 availability model for airport pickups
-- **Estimated Impact**: Reduce "No Cars Available" by 40%
-
-### 3. **Ride Pooling Initiative**
-Incentivize customer pooling during peak hours:
-- Offer 20-30% discounts for shared City→Airport rides
-- Create carpooling incentive for morning commuters
-- Bundle multiple rider requests to improve driver profitability
-- **Estimated Impact**: Increase vehicle utilization by 35-40%
-
-### 4. **Shift Timing Realignment**
-Adjust operational cycles based on demand patterns:
-- Change "end-of-day" reset from midnight to 4:00 AM
-- Aligns with natural business cycles and low-demand period
-- Enables better shift planning for peak hours
-- **Estimated Impact**: Improve overall operational efficiency by 15%
-
-### 5. **Predictive Analytics & Real-time Deployment**
-Implement machine learning for supply optimization:
-- Predict demand by time slot and location
-- Pre-position drivers 30-60 minutes before peak demand
-- Real-time tracking and dynamic routing
-- Alert system for high-gap periods
-- **Estimated Impact**: Close 30-35% of overall gap within 6 months
-
-### 6. **Targeted Marketing & Demand Smoothing**
-Reduce peak hour concentration:
-- Promote off-peak travel with discounts (10 AM - 3 PM)
-- Offer advance booking discounts to spread demand
-- Target corporate partnerships for flexible travel times
-- **Estimated Impact**: Shift 10-15% of demand to off-peak hours
-
-## 📈 Visualizations
-
-This project includes comprehensive visualizations:
-
-1. **Request Frequency by Time Slot** - Hourly demand distribution
-2. **Status Distribution** - Pie/bar chart of Completed vs Cancelled vs No Cars
-3. **City vs Airport Comparison** - Location-specific demand patterns
-4. **Supply-Demand Gap Trends** - Time-series showing gap evolution
-5. **Peak Hour Analysis** - Focusing on critical morning and evening periods
-6. **Cancellation Pattern Heatmap** - Time and location intersection analysis
-7. **Completion Rate Trends** - Performance metrics across time slots
-8. **Weekend vs Weekday Comparison** - Demand pattern differences
-
-## 🛠️ Installation
-
-### Prerequisites
-- Python 3.7+
-- Jupyter Notebook
-- pip or conda
-
-### Required Libraries
-```bash
-pip install pandas numpy matplotlib seaborn
+### Sample Query: Ranking Problem Hours by Location
+```sql
+WITH LocationHourlyStats AS (
+    SELECT 
+        pickup_point,
+        request_hour,
+        COUNT(request_id) AS total_requests,
+        SUM(CASE WHEN status != 'Trip Completed' THEN 1 ELSE 0 END) AS unfulfilled_count,
+        SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END) AS cancellations,
+        SUM(CASE WHEN status = 'No Cars Available' THEN 1 ELSE 0 END) AS no_cars_count,
+        ROUND(SUM(CASE WHEN status != 'Trip Completed' THEN 1.0 ELSE 0 END) * 100.0 / COUNT(*), 2) AS unfulfilled_rate_pct
+    FROM uber_trips
+    GROUP BY pickup_point, request_hour
+)
+SELECT 
+    RANK() OVER (ORDER BY unfulfilled_count DESC) AS severity_rank,
+    pickup_point,
+    request_hour,
+    total_requests,
+    unfulfilled_count,
+    unfulfilled_rate_pct,
+    CASE 
+        WHEN cancellations > no_cars_count THEN 'Driver Cancellations'
+        ELSE 'Car Shortage (No Cars)'
+    END AS dominant_issue
+FROM LocationHourlyStats
+ORDER BY severity_rank ASC
+LIMIT 5;
 ```
 
-### Clone Repository
+**Results:**
+| Rank | Pickup Location | Hour | Total Requests | Unfulfilled Trips | Failure Rate (%) | Main Issue |
+| :---: | :--- | :---: | :---: | :---: | :---: | :--- |
+| **1** | Airport | 18 (6 PM) | 405 | 324 | 80.00% | Car Shortage (No Cars) |
+| **2** | Airport | 20 (8 PM) | 378 | 304 | 80.42% | Car Shortage (No Cars) |
+| **3** | Airport | 19 (7 PM) | 366 | 283 | 77.32% | Car Shortage (No Cars) |
+| **4** | Airport | 21 (9 PM) | 343 | 282 | 82.22% | Car Shortage (No Cars) |
+| **5** | City | 8 (8 AM) | 350 | 262 | 74.86% | Driver Cancellations |
+
+All 8 queries were tested in Python and matched the Pandas calculations exactly.
+
+## Dashboard
+
+I created a Streamlit dashboard (`dashboard/app.py`) so anyone can explore the numbers interactively:
+- **KPI Summary Cards:** Total Requests, Completed Trips, Unfulfilled Requests, Cancellation Rate, and No Cars Available.
+- **Charts:**
+  - Trip status breakdown.
+  - Completed vs. unfulfilled requests by hour.
+  - Hourly cancellation and car shortage rates.
+  - City vs. Airport performance comparison.
+  - Location and hour failure heatmap.
+  - Morning vs. Evening rush comparison.
+- **Filters:** Pickup location, time window, hour slider, and ride status.
+
+## Key Findings
+
+### 1. Overall Unfulfilled Requests (58.03%)
+- **Total Requests:** 6,745
+- **Completed Trips:** 2,831 (41.97%)
+- **Unfulfilled Requests:** 3,914 (58.03%)
+- Out of all unfulfilled requests:
+  - **67.71%** were due to no cars being available (2,650 / 3,914).
+  - **32.29%** were due to driver cancellations (1,264 / 3,914).
+
+### 2. Two Different Problem Windows
+The data shows two distinct rush periods with completely different failure reasons:
+
+- **Morning Rush (5:00 AM to 9:59 AM / Hours 5–9):**
+  - **Total Requests:** 2,103 requests across all locations.
+  - **City Pickup Volume:** 1,677 requests.
+  - **City Cancellations:** 820 cancellations.
+  - **City Cancellation Rate:** **48.90%** (`820 / 1,677`).
+  - **Peak Hour:** Hour 7 (7:00 to 7:59 AM) had a **50.77%** cancellation rate (`164 / 323`).
+  - **Dataset Share:** **64.87%** of all 1,264 cancellations in the entire dataset happened in the City during these 5 hours (`820 / 1,264`).
+  - **Main Issue:** **Driver Cancellations** made up 68.05% of all unfulfilled City requests in the morning (`820 / 1,205`).
+
+- **Evening Rush (5:00 PM to 9:59 PM / Hours 17–21):**
+  - **Total Requests:** 2,342 requests across all locations.
+  - **Airport Pickup Volume:** 1,800 requests.
+  - **Airport Car Shortages:** 1,321 `No Cars Available` requests.
+  - **Airport Car-Shortage Rate:** **73.39%** (`1,321 / 1,800`).
+  - **Peak Hour:** Hour 18 (6:00 to 6:59 PM) had a **76.30%** car-shortage rate (`309 / 405`).
+  - **Dataset Share:** **49.85%** of all 2,650 car shortages in the entire dataset happened at the Airport during these 5 hours (`1,321 / 2,650`).
+  - **Main Issue:** **Car Shortages** made up 92.57% of all unfulfilled Airport requests in the evening (`1,321 / 1,427`).
+
+### 3. City vs. Airport (Full 24-Hour Comparison)
+- **City (3,507 total requests across 24h):**
+  - Completed: 1,504 (42.89%)
+  - **Cancelled: 1,066 (30.40%)** — accounts for 84.34% of all cancellations in the dataset (`1,066 / 1,264`).
+  - No Cars Available: 937 (26.72%).
+  - *Hypothesis (Requires External Data):* The data does not track driver earnings or where drivers go after dropping off a rider. A common hypothesis is that city drivers avoid early morning airport trips because they expect few returning riders from the airport, risking an unpaid drive back. Testing this would require flight schedules and driver location logs.
+
+- **Airport (3,238 total requests across 24h):**
+  - Completed: 1,327 (40.98%)
+  - Cancelled: 198 (6.11%).
+  - **No Cars Available: 1,713 (52.90%)** — accounts for 64.64% of all car shortages in the dataset (`1,713 / 2,650`).
+  - *Hypothesis (Requires External Data):* The dataset does not track flight arrivals or cars waiting near the airport. The high number of shortages suggests that passenger demand outstrips available cars nearby in the evening. Testing this would require flight timetables and queue logs.
+
+### 4. Failure Count vs. Failure Percentage
+Early morning hours between 1:00 AM and 3:00 AM show failure rates over 65%, but only represent 80–90 total requests (for example, Hour 1 has 60 unfulfilled requests out of 85). In contrast, Hour 18 (6:00 to 7:00 PM) has 510 requests and **346 unfulfilled trips** (`346 / 510` = 67.84%). Looking at total unfulfilled volume helps focus on the hours where the most riders are affected.
+
+## What I Learned
+
+- How to understand the operational context behind missing values instead of immediately dropping rows.
+- The importance of comparing failure volume alongside failure rates to prioritize problem hours accurately.
+- How to write clean SQL queries using CTEs and window functions to rank multi-variable metrics.
+- How to build a simple, responsive dashboard in Streamlit and Plotly to make data easy to explore.
+
+## How to Run the Project
+
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/Karunesh17/Exploratory-Data-Analysis-on-Uber-Supply-Demand-Gap.git
 cd Exploratory-Data-Analysis-on-Uber-Supply-Demand-Gap
 ```
 
-## 🚀 Usage
-
-### Run the Jupyter Notebook
+### 2. Install Dependencies
 ```bash
-jupyter notebook source.ipynb
+pip install -r requirements.txt
 ```
 
-### Key Code Sections
-
-**Data Loading & Initial Exploration**
-```python
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-df = pd.read_csv("uber_cleaned_data.csv")
-df.info()
-df.describe()
+### 3. Run Data Cleaning & SQL Checks
+```bash
+python data/clean_data.py
+python sql/execute_sql.py
 ```
 
-**Extracting Time-Based Features**
-```python
-df['Request timestamp'] = pd.to_datetime(df['Request timestamp'])
-df['pickup_hour'] = df['Request timestamp'].dt.hour
-df['pickup_date'] = df['Request timestamp'].dt.date
-df['day_of_week'] = df['Request timestamp'].dt.dayofweek
+### 4. Launch the Dashboard
+```bash
+streamlit run dashboard/app.py
 ```
 
-**Supply-Demand Gap Calculation**
-```python
-demand = df.groupby('pickup_hour')['Request ID'].count()
-supply = df[df['Status'] == 'Trip Completed'].groupby('pickup_hour')['Request ID'].count()
-gap = demand - supply
+### 5. Open the Notebook
+```bash
+jupyter notebook notebooks/uber_supply_demand_analysis.ipynb
 ```
-
-**Cancellation Analysis by Time Slot**
-```python
-cancellations = df[df['Status'] == 'Cancelled by Driver'].groupby('pickup_hour').size()
-no_cars = df[df['Status'] == 'No Cars Available'].groupby('pickup_hour').size()
-```
-
-**Location-Specific Analysis**
-```python
-city_airport = df[df['Pickup point'] == 'City'].groupby('pickup_hour')['Status'].value_counts()
-airport_city = df[df['Pickup point'] == 'Airport'].groupby('pickup_hour')['Status'].value_counts()
-```
-
-## 📊 Technologies Used
-
-| Technology | Purpose |
-|------------|---------|
-| **Python 3** | Core programming language |
-| **Pandas** | Data manipulation and analysis |
-| **NumPy** | Numerical computations |
-| **Matplotlib** | Static data visualizations |
-| **Seaborn** | Advanced statistical visualizations |
-| **Jupyter Notebook** | Interactive development and reporting |
-
-## 📈 Expected Business Impact
-
-Based on recommendations implementation:
-
-| Metric | Current | Target | Timeline |
-|--------|---------|--------|----------|
-| Overall Trip Completion Rate | 42% | 58-62% | 6 months |
-| Morning Gap Reduction | - | 25-30% | 3 months |
-| Evening Gap Reduction | - | 20-25% | 3 months |
-| Driver Utilization | 0.83 trips/driver | 1.3-1.5 | 6 months |
-| Weekend Performance | 45% gap | 30-35% gap | 6 months |
-
-## 🔗 Resources
-
-- [Kaggle - Similar Uber Dataset](https://www.kaggle.com/goyalshalini93/uber-supply-demand-gap-analysis-eda)
-- [Uber Engineering Blog](https://www.uber.com/en-IN/blog/)
-- [Python Data Science Handbook](https://jakevdp.github.io/PythonDataScienceHandbook/)
-
-## 📧 Contact & Support
-
-For questions or feedback:
-- **GitHub**: [Karunesh17](https://github.com/Karunesh17)
-- **Project Repository**: [Exploratory-Data-Analysis-on-Uber-Supply-Demand-Gap](https://github.com/Karunesh17/Exploratory-Data-Analysis-on-Uber-Supply-Demand-Gap)
-
-## 📜 License
-
-This project is provided as-is for educational and analytical purposes.
-
-## 🎓 Learning Outcomes
-
-By exploring this project, you'll learn:
-- ✅ Exploratory Data Analysis (EDA) techniques
-- ✅ Time-series data analysis and visualization
-- ✅ Supply chain optimization concepts
-- ✅ Business problem-solving with data
-- ✅ Data-driven recommendation making
-- ✅ Pandas data manipulation and groupby operations
-- ✅ Matplotlib and Seaborn visualization
-
----
-
-**Project Status**: Complete ✅ | **Last Updated**: 2024 | **Difficulty Level**: Intermediate
-
-**Key Takeaway**: This analysis demonstrates how data-driven insights can identify operational bottlenecks and guide strategic business decisions for a mobility platform like Uber.
