@@ -1,4 +1,5 @@
 # Uber Supply-Demand Gap Analysis
+Here is the direct link:-https://exploratory-data-analysis-on-uber-supply-demand-gap.streamlit.app/
 
 An exploratory data analysis and SQL case study examining why Uber ride requests go unfulfilled, when cancellations and car shortages occur, and how ride availability differs between the City and the Airport.
 
